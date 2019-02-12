@@ -30,7 +30,7 @@ nb <- function(dataset, rvar, evar, laplace = 0, data_filter = "") {
   df_name <- if (!is_string(dataset)) deparse(substitute(dataset)) else dataset
   dataset <- get_data(dataset, c(rvar, evar), filt = data_filter)
 
-  if (any(summarise_all(dataset, funs(does_vary)) == FALSE)) {
+  if (any(summarise_all(dataset, does_vary) == FALSE)) {
     return("One or more selected variables show no variation. Please select other variables." %>% add_class("nb"))
   }
 
@@ -84,7 +84,7 @@ summary.nb <- function(object, dec = 3, ...) {
 
   cat("Naive Bayes Classifier")
   cat("\nData                 :", object$df_name)
-  if (object$data_filter %>% gsub("\\s", "", .) != "") {
+  if (!is_empty(object$data_filter)) {
     cat("\nFilter               :", gsub("\\n", "", object$data_filter))
   }
   cat("\nResponse variable    :", object$rvar)
@@ -132,14 +132,14 @@ plot.nb <- function(x, plots = "correlations", lev = "All levels", nrobs = 1000,
   if (is.character(x)) return(x)
   if (is_empty(plots[1])) return(invisible())
 
-  evar <- mutate_all(select(x$model$model, -1), funs(as_numeric))
+  evar <- mutate_all(select(x$model$model, -1), as_numeric)
   rvar <- x$model$model[[1]]
 
   if ("correlations" %in% plots) {
     if (lev == "All levels") {
-      return(radiant.basics:::plot.correlation(evar, nrobs = nrobs))
+      return(sshhr(radiant.basics:::plot.correlation(evar, nrobs = nrobs)))
     } else {
-      return(radiant.basics:::plot.correlation(filter(evar, rvar == lev), nrobs = nrobs))
+      return(sshhr(radiant.basics:::plot.correlation(filter(evar, rvar == lev), nrobs = nrobs)))
     }
   }
 
@@ -254,7 +254,7 @@ predict.nb <- function(
   }
 
   predict_model(object, pfun, "nb.predict", pred_data, pred_cmd, dec = dec) %>%
-    set_attr("pred_data", df_name)
+    set_attr("radiant_pred_data", df_name)
 }
 
 #' Print method for predict.nb
@@ -265,7 +265,7 @@ predict.nb <- function(
 #'
 #' @export
 print.nb.predict <- function(x, ..., n = 10)
-  print_predict_model(x, ..., n = n, header = "Naive Bayes Classifier", lev = attr(x, "lev"))
+  print_predict_model(x, ..., n = n, header = "Naive Bayes Classifier", lev = attr(x, "radiant_lev"))
 
 #' Plot method for nb.predict function
 #'
@@ -303,8 +303,8 @@ plot.nb.predict <- function(
 
   if (is.character(x)) return(x)
 
-  pvars <- base::setdiff(attr(x, "vars"), attr(x, "evar"))
-  rvar <- attr(x, "rvar")
+  pvars <- base::setdiff(attr(x, "radiant_vars"), attr(x, "radiant_evar"))
+  rvar <- attr(x, "radiant_rvar")
   x %<>% gather(".class", "Prediction", !! pvars)
 
   byvar <- c(xvar, color)
@@ -313,7 +313,7 @@ plot.nb.predict <- function(
 
   tmp <- group_by_at(x, .vars = byvar) %>%
     select_at(.vars = c(byvar, "Prediction")) %>%
-    summarise_all(funs(mean))
+    summarise_all(mean)
   p <- ggplot(tmp, aes_string(x = xvar, y = "Prediction", color = color, group = color)) +
     geom_line()
 
@@ -346,7 +346,7 @@ plot.nb.predict <- function(
 store.nb.predict <- function(dataset, object, name = "pred_nb", ...) {
 
   ## extract the names of the variables predicted
-  pvars <- base::setdiff(attr(object, "vars"), attr(object, "evar"))
+  pvars <- base::setdiff(attr(object, "radiant_vars"), attr(object, "radiant_evar"))
 
   ## as.vector removes all attributes from df
   df <- as.vector(object[, pvars])
@@ -362,7 +362,7 @@ store.nb.predict <- function(dataset, object, name = "pred_nb", ...) {
     }
   }
 
-  indr <- indexr(dataset, attr(object, "evar"), "", cmd = attr(object, "pred_cmd"))
+  indr <- indexr(dataset, attr(object, "radiant_evar"), "", cmd = attr(object, "radiant_pred_cmd"))
   pred <- as.data.frame(matrix(NA, nrow = indr$nr, ncol = ncol(df)), stringsAsFactors = FALSE)
   pred[indr$ind, ] <- df
 

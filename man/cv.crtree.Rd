@@ -35,6 +35,26 @@ Cross-validation for Classification and Regression Trees
 \details{
 See \url{https://radiant-rstats.github.io/docs/model/crtreenn.html} for an example in Radiant
 }
+\examples{
+\dontrun{
+result <- crtree(dvd, "buy", c("coupon", "purch", "last"))
+cv.crtree(result, cp = 0.0001, pcp = seq(0, 0.01, length.out = 11))
+cv.crtree(result, cp = 0.0001, pcp = c(0, 0.001, 0.002), fun = profit, cost = 1, margin = 5)
+result <- crtree(diamonds, "price", c("carat", "color", "clarity"), type = "regression", cp = 0.001)
+cv.crtree(result, cp = 0.001, pcp = seq(0, 0.01, length.out = 11), fun = MAE)
+}
+
+}
 \seealso{
 \code{\link{crtree}} to generate an initial model that can be passed to cv.crtree
+
+\code{\link{Rsq}} to calculate an R-squared measure for a regression
+
+\code{\link{RMSE}} to calculate the Root Mean Squared Error for a regression
+
+\code{\link{MAE}} to calculate the Mean Absolute Error for a regression
+
+\code{\link{auc}} to calculate the area under the ROC curve for classification
+
+\code{\link{profit}} to calculate profits for classification at a cost/margin threshold
 }

@@ -34,6 +34,7 @@ crs <- function(dataset, id, prod, pred, rate, data_filter = "") {
 
   ## make sure spread doesn't complain
   cn <- colnames(dataset)
+  # nr <- dplyr::distinct_at(dataset, .vars = base::setdiff(cn, rate), .keep_all = TRUE) %>% 
   nr <- distinct_(dataset, .dots = base::setdiff(cn, rate), .keep_all = TRUE) %>% 
     nrow()
   if (nr < nrow(dataset)) {
@@ -72,10 +73,10 @@ crs <- function(dataset, id, prod, pred, rate, data_filter = "") {
   ## average scores and rankings
   avg <- dataset[uid, , drop = FALSE] %>%
     select(nind) %>%
-    summarise_all(funs(mean), na.rm = TRUE)
+    summarise_all(mean, na.rm = TRUE)
   ravg <- avg
   ravg[1, ] <- min_rank(desc(avg))
-  ravg <- mutate_all(ravg, funs(as.integer))
+  ravg <- mutate_all(ravg, as.integer)
 
   ## actual scores and rankings (if available, else will be NA)
   act <- dataset[-uid, , drop = FALSE] %>% select(nind)
@@ -108,7 +109,7 @@ crs <- function(dataset, id, prod, pred, rate, data_filter = "") {
   }
   ## comfirmed to produce consistent results -- see cf-demo-missing-state.rda and cf-demo-missing.xlsx
   srate[is.na(srate)] <- 0
-  srate <- mutate_all(as.data.frame(srate, stringsAsFactors = FALSE), funs(ifelse(is.infinite(.), 0, .)))
+  srate <- mutate_all(as.data.frame(srate, stringsAsFactors = FALSE), ~ ifelse(is.infinite(.), 0, .))
   cors <- sshhr(cor(t(dataset[uid, ind]), t(dataset[-uid, ind]), use = "pairwise.complete.obs"))
 
   ## comfirmed to produce correct results -- see cf-demo-missing-state.rda and cf-demo-missing.xlsx
@@ -172,7 +173,7 @@ summary.crs <- function(object, n = 36, dec = 2, ...) {
 
   cat("Collaborative filtering")
   cat("\nData       :", object$df_name)
-  if (object$data_filter %>% gsub("\\s", "", .) != "") {
+  if (!is_empty(object$data_filter)) {
     cat("\nFilter     :", gsub("\\n", "", object$data_filter))
   }
   cat("\nUser id    :", object$id)

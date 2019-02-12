@@ -82,7 +82,7 @@ crtree <- function(
     }
   }
 
-  if (any(summarise_all(dataset, funs(does_vary)) == FALSE)) {
+  if (any(summarise_all(dataset, does_vary) == FALSE)) {
     return("One or more selected variables show no variation. Please select other variables." %>% add_class("crtree"))
   }
 
@@ -268,7 +268,7 @@ summary.crtree <- function(
     cat("Regression tree")
   }
   cat("\nData                 :", object$df_name)
-  if (object$data_filter %>% gsub("\\s", "", .) != "") {
+  if (!is_empty(object$data_filter)) {
     cat("\nFilter               :", gsub("\\n", "", object$data_filter))
   }
   cat("\nResponse variable    :", object$rvar)
@@ -613,7 +613,7 @@ predict.crtree <- function(
   }
 
   predict_model(object, pfun, "crtree.predict", pred_data, pred_cmd, conf_lev, se, dec) %>%
-    set_attr("pred_data", df_name)
+    set_attr("radiant_pred_data", df_name)
 }
 
 #' Print method for predict.crtree
@@ -643,9 +643,23 @@ print.crtree.predict <- function(x, ..., n = 10)
 #' @return A data.frame sorted by the mean, sd, min, and max of the performance metric
 #'
 #' @seealso \code{\link{crtree}} to generate an initial model that can be passed to cv.crtree
+#' @seealso \code{\link{Rsq}} to calculate an R-squared measure for a regression
+#' @seealso \code{\link{RMSE}} to calculate the Root Mean Squared Error for a regression
+#' @seealso \code{\link{MAE}} to calculate the Mean Absolute Error for a regression
+#' @seealso \code{\link{auc}} to calculate the area under the ROC curve for classification
+#' @seealso \code{\link{profit}} to calculate profits for classification at a cost/margin threshold
 #'
 #' @importFrom rpart prune.rpart
 #' @importFrom shiny getDefaultReactiveDomain withProgress incProgress
+#'
+#' @examples
+#' \dontrun{
+#' result <- crtree(dvd, "buy", c("coupon", "purch", "last"))
+#' cv.crtree(result, cp = 0.0001, pcp = seq(0, 0.01, length.out = 11))
+#' cv.crtree(result, cp = 0.0001, pcp = c(0, 0.001, 0.002), fun = profit, cost = 1, margin = 5)
+#' result <- crtree(diamonds, "price", c("carat", "color", "clarity"), type = "regression", cp = 0.001)
+#' cv.crtree(result, cp = 0.001, pcp = seq(0, 0.01, length.out = 11), fun = MAE)
+#' }
 #'
 #' @export
 cv.crtree <- function(

@@ -70,7 +70,7 @@ nn <- function(
     }
   }
 
-  if (any(summarise_all(dataset, .funs = funs(does_vary)) == FALSE)) {
+  if (any(summarise_all(dataset, .funs = does_vary) == FALSE)) {
     return("One or more selected variables show no variation. Please select other variables." %>% add_class("nn"))
   }
 
@@ -158,7 +158,7 @@ nn <- function(
 #'
 #' @return Scaled data frame
 #'
-#' @seealso \code{\link{copy_attr}} to copy attributes from a training to a validation dataset
+#' @seealso \code{\link{copy_attr}} to copy attributes from a training to a test dataset
 #'
 #' @export
 scaledf <- function(
@@ -174,37 +174,42 @@ scaledf <- function(
   descr <- attr(dataset, "description")
   if (calc) {
     if (length(wts) == 0) {
-      ms <- summarise_at(dataset, .vars = cn, .funs = funs(mean(., na.rm = TRUE))) %>%
+      ms <- summarise_at(dataset, .vars = cn, .funs = ~ mean(., na.rm = TRUE)) %>%
         set_attr("description", NULL)
       if (scale) {
-        sds <- summarise_at(dataset, .vars = cn, .funs = funs(sd(., na.rm = TRUE))) %>%
+        sds <- summarise_at(dataset, .vars = cn, .funs = ~ sd(., na.rm = TRUE)) %>%
           set_attr("description", NULL)
       }
     } else {
-      ms <- summarise_at(dataset, .vars = cn, .funs = funs(weighted.mean(., wts, na.rm = TRUE))) %>%
+      ms <- summarise_at(dataset, .vars = cn, .funs = ~ weighted.mean(., wts, na.rm = TRUE)) %>%
         set_attr("description", NULL)
       if (scale) {
-        sds <- summarise_at(dataset, .vars = cn, .funs = funs(weighted.sd(., wts, na.rm = TRUE))) %>%
+        sds <- summarise_at(dataset, .vars = cn, .funs = ~ weighted.sd(., wts, na.rm = TRUE)) %>%
           set_attr("description", NULL)
       }
     }
   } else {
-    ms <- attr(dataset, "ms")
-    sds <- attr(dataset, "sds")
+    ms <- attr(dataset, "radiant_ms")
+    sds <- attr(dataset, "radiant_sds")
     if (is.null(ms) && is.null(sds)) return(dataset)
   }
   if (center && scale) {
-    mutate_at(dataset, .vars = intersect(names(ms), cn), .funs = funs((. - ms$.) / (sf * sds$.))) %>%
-      set_attr("ms", ms) %>%
-      set_attr("sds", sds) %>%
+    icn <- intersect(names(ms), cn)
+    dataset[icn] <- lapply(icn, function(var) (dataset[[var]] - ms[[var]]) / (sf * sds[[var]]))
+    dataset %>%
+      set_attr("radiant_ms", ms) %>%
+      set_attr("radiant_sds", sds) %>%
       set_attr("description", descr)
   } else if (center) {
-    mutate_at(dataset, .vars = intersect(names(ms), cn), .funs = funs(. - ms$.)) %>%
-      set_attr("ms", ms) %>%
+    icn <- intersect(names(ms), cn)
+    dataset[icn] <- lapply(icn, function(var) dataset[[var]] - ms[[var]])
+    dataset %>%
+      set_attr("radiant_ms", ms) %>%
       set_attr("description", descr)
   } else if (scale) {
-    mutate_at(dataset, .vars = intersect(names(sds), cn), .funs = funs(. / (sf * sds$.))) %>%
-      set_attr("sds", sds) %>%
+    icn <- intersect(names(sds), cn)
+    dataset[icn] <- lapply(icn, function(var) dataset[[var]] / (sf * sds[[var]]))
+      set_attr("radiant_sds", sds) %>%
       set_attr("description", descr)
   } else {
     dataset
@@ -238,7 +243,7 @@ summary.nn <- function(object, prn = TRUE, ...) {
     cat("Activation function  : Linear (regression)")
   }
   cat("\nData                 :", object$df_name)
-  if (object$data_filter %>% gsub("\\s", "", .) != "") {
+  if (!is_empty(object$data_filter)) {
     cat("\nFilter               :", gsub("\\n", "", object$data_filter))
   }
   cat("\nResponse variable    :", object$rvar)
@@ -270,14 +275,12 @@ summary.nn <- function(object, prn = TRUE, ...) {
   } else {
     if (prn) {
       cat("Weights              :\n")
-      out <- capture.output(summary(object$model))[-1:-2]
-      if (nchar(out[1]) > 150) {
-        oop <- base::options(width = 100)
-        on.exit(base::options(oop), add = TRUE)
-      }
-      gsub("^", "  ", out) %>%
-      paste0(collapse = "\n") %>%
-      cat("\n")
+      oop <- base::options(width = 100)
+      on.exit(base::options(oop), add = TRUE)
+      capture.output(summary(object$model))[-1:-2] %>%
+        gsub("^", "  ", .) %>%
+        paste0(collapse = "\n") %>%
+        cat("\n")
     }
   }
 }
@@ -407,7 +410,7 @@ predict.nn <- function(
   }
 
   predict_model(object, pfun, "nn.predict", pred_data, pred_cmd, conf_lev = 0.95, se = FALSE, dec) %>%
-    set_attr("pred_data", df_name)
+    set_attr("radiant_pred_data", df_name)
 }
 
 #' Print method for predict.nn
@@ -420,7 +423,7 @@ predict.nn <- function(
 print.nn.predict <- function(x, ..., n = 10)
   print_predict_model(x, ..., n = n, header = "Neural Network")
 
-#' Cross-validation for Neural Network
+#' Cross-validation for a Neural Network
 #'
 #' @details See \url{https://radiant-rstats.github.io/docs/model/nn.html} for an example in Radiant
 #'
@@ -436,12 +439,25 @@ print.nn.predict <- function(x, ..., n = 10)
 #'
 #' @return A data.frame sorted by the mean of the performance metric
 #'
-#' @seealso \code{\link{summary.nn}} to summarize results
-#' @seealso \code{\link{plot.nn}} to plot results
-#' @seealso \code{\link{predict.nn}} for prediction
+#' @seealso \code{\link{nn}} to generate an initial model that can be passed to cv.nn
+#' @seealso \code{\link{Rsq}} to calculate an R-squared measure for a regression
+#' @seealso \code{\link{RMSE}} to calculate the Root Mean Squared Error for a regression
+#' @seealso \code{\link{MAE}} to calculate the Mean Absolute Error for a regression
+#' @seealso \code{\link{auc}} to calculate the area under the ROC curve for classification
+#' @seealso \code{\link{profit}} to calculate profits for classification at a cost/margin threshold
 #'
 #' @importFrom nnet nnet.formula
 #' @importFrom shiny getDefaultReactiveDomain withProgress incProgress
+#'
+#' @examples
+#' \dontrun{
+#' result <- nn(dvd, "buy", c("coupon", "purch", "last"))
+#' cv.nn(result, decay = seq(0, 1, .5), size = 1:2)
+#' cv.nn(result, decay = seq(0, 1, .5), size = 1:2, fun = profit, cost = 1, margin = 5)
+#' result <- nn(diamonds, "price", c("carat", "color", "clarity"), type = "regression")
+#' cv.nn(result, decay = seq(0, 1, .5), size = 1:2)
+#' cv.nn(result, decay = seq(0, 1, .5), size = 1:2, fun = Rsq)
+#' }
 #'
 #' @export
 cv.nn <- function(

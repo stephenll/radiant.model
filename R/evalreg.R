@@ -5,7 +5,7 @@
 #' @param dataset Dataset
 #' @param pred Predictions or predictors
 #' @param rvar Response variable
-#' @param train Use data from training ("Training"), validation ("Validation"), both ("Both"), or all data ("All") to evaluate model evalreg
+#' @param train Use data from training ("Training"), test ("Test"), both ("Both"), or all data ("All") to evaluate model evalreg
 #' @param data_filter Expression entered in, e.g., Data > View to filter the dataset in Radiant. The expression should be a string (e.g., "training == 1")
 #'
 #' @return A list of results
@@ -35,11 +35,11 @@ evalreg <- function(
   vars <- c(pred, rvar)
   if (train == "Both") {
     dat_list[["Training"]] <- get_data(dataset, vars, filt = data_filter)
-    dat_list[["Validation"]] <- get_data(dataset, vars, filt = paste0("!(", data_filter, ")"))
+    dat_list[["Test"]] <- get_data(dataset, vars, filt = paste0("!(", data_filter, ")"))
   } else if (train == "Training") {
     dat_list[["Training"]] <- get_data(dataset, vars, filt = data_filter)
-  } else if (train == "Validation") {
-    dat_list[["Validation"]] <- get_data(dataset, vars, filt = paste0("!(", data_filter, ")"))
+  } else if (train == "Test" | train == "Validation") {
+    dat_list[["Test"]] <- get_data(dataset, vars, filt = paste0("!(", data_filter, ")"))
   } else {
     dat_list[["All"]] <- get_data(dataset, vars, filt = "")
   }
@@ -56,8 +56,8 @@ evalreg <- function(
       Predictor = pred,
       n = nrow(dat[pred]),
       Rsq = cor(rv, select_at(dat, pred))^2 %>% .[1, ],
-      RMSE = summarise_at(dat, .vars = pred, .funs = funs(sqrt(mean((rv - .) ^ 2, na.rm = TRUE)))) %>% unlist(),
-      MAE = summarise_at(dat, .vars = pred, .funs = funs(mean(abs(rv - .), na.rm = TRUE))) %>% unlist(),
+      RMSE = summarise_at(dat, .vars = pred, .funs = ~ sqrt(mean((rv - .) ^ 2, na.rm = TRUE))) %>% unlist(),
+      MAE = summarise_at(dat, .vars = pred, .funs = ~ mean(abs(rv - .), na.rm = TRUE)) %>% unlist(),
       stringsAsFactors = FALSE
     )
   }
@@ -89,7 +89,7 @@ summary.evalreg <- function(object, dec = 3, ...) {
   if (is.character(object)) return(object)
   cat("Evaluate predictions for regression models\n")
   cat("Data        :", object$df_name, "\n")
-  if (object$data_filter %>% gsub("\\s", "", .) != "") {
+  if (!is_empty(object$data_filter)) {
     cat("Filter      :", gsub("\\n", "", object$data_filter), "\n")
   }
   cat("Results for :", object$train, "\n")
@@ -123,7 +123,7 @@ plot.evalreg <- function(x, vars = c("Rsq", "RMSE", "MAE"), ...) {
   dat <- gather(x$dat, "Metric", "Value", !! vars, factor_key = TRUE) %>%
     mutate(Predictor = factor(Predictor, levels = unique(Predictor)))
 
-  ## what data was used in evaluation? All, Training, Validation, or Both
+  ## what data was used in evaluation? All, Training, Test, or Both
   type <- unique(dat$Type)
 
   p <- visualize(
